@@ -247,10 +247,10 @@ Mat getGuideImage(int niter ,int i, Mat img , float sigma){
 /* the main function */
 int main(){
 	
-	String name = "./imgs_b/mind.png";
+	String name = "./imgs_b/cartoon.png";
 
 	Mat img = imread(name,0); // read the input image
-	
+	Mat color = imread(name,1);
 	if(img.empty()){
 		printf("No such file.\n");
 		getchar();
@@ -258,16 +258,23 @@ int main(){
 	}
 
 	clock_t startTime = clock();
-	float R[] = {0.5,1,1.5,5};//,2.5,3,3.5,4};    //spatial tolerance
+	float R[] = {0.5,1,1.5};//,2.5,3,3.5,4};    //spatial tolerance
 	float J[8];
 	Mat M[8];
 	Mat M_final;
 
-	for(int i = 0 ; i<4 ; i++){
+	for(int i = 0 ; i<3 ; i++){
 		Mat res = RollingGuidanceFilter::filter(img,R[i],25.5,4);
 		imwrite("./imgs_b/roll" + to_string(i) + ".jpg" , res);
-		Mat enis = (img - res)*5 + 0.5*res;
+		Mat enis = (img - res)*5 + res;
 		imwrite("./imgs_b/enh" + to_string(i) + ".jpg" , enis);
+
+		Mat resc = RollingGuidanceFilter::filter(color,R[i],25.5,4);
+		imwrite("./imgs_b/roll_color" + to_string(i) + ".jpg" , resc);
+		Mat enisc = (color - resc)*5 + 1*resc;
+		imwrite("./imgs_b/enh_color" + to_string(i) + ".jpg" , enisc);
+		
+
 		Laplacian(res,res,3);
 		res.convertTo(res, CV_8UC1);
 
@@ -309,7 +316,7 @@ int main(){
 			M_final = M_final*0;
 		}
 		else{
-			M_final += M[i]*(i/4.0);
+			M_final += M[i]*(i/3.0);
 		}
 		imwrite("./imgs_b/m_"+to_string(i)+".jpg",M[i]);
 		
@@ -318,9 +325,9 @@ int main(){
 	imwrite("./imgs_b/MF.jpg",M_final);
 	//detailEnhance(Mat src, Mat dst, float sigma_s=10, float sigma_r=0.15f)
 
-	Mat output = RollingGuidanceFilter::filter(M_final,1.5,25.5,4);
+	Mat output = RollingGuidanceFilter::filter(M_final,1.5,25.5,1);
 	imwrite("./imgs_b/output.jpg" , output); // M map
-	Mat I_basic = RollingGuidanceFilter::filter(img,1,25.5,4);
+	Mat I_basic = RollingGuidanceFilter::filter(img,1,25.5,1);
 	imwrite("./imgs_b/I_basic.jpg" , I_basic);
 	int **IoM_arr;
 	IoM_arr = (int**)malloc(img.rows*sizeof(int));
@@ -380,7 +387,7 @@ int main(){
 	Mat enI = I_basic + lambda*MoID_;
 	//enI = scale_image(enI , min_pixel(enI) , max_pixel(enI));
 	Canny( output, output, 50, 150, 3);
-	
+	imwrite("./imgs_b/outputt.jpg" , output);
 	
 	imwrite("./imgs_b/MoID.jpg" , MoID_);
 	
