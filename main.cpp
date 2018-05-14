@@ -153,6 +153,13 @@
 //	return 0;
 //}
 
+
+
+#include <stdio.h>
+#include <iostream>
+#include <string>
+#include <vector>
+#include "opencv2/core/core.hpp"
 #include "RollingGuidanceFilter.h"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -228,7 +235,7 @@ int** scale_image(int** src , int min , int max , int rows , int cols){
 }
 
 //((uint8)((B == 255) ? B:min(255, ((A << 8 ) / (255 - B)))))
-void pencil_sketch(Mat src){
+void pencil_sketch(Mat src , String name){
 	/*
 	Mat neg = Mat::zeros(src.rows , src.cols , src.type());
 	for(int x = 0 ; x<src.rows ; x++){
@@ -280,8 +287,14 @@ void pencil_sketch(Mat src){
 		}
 	}
 	
-	imwrite("./imgs_b/sketch.jpg",neg);
+	imwrite(name,neg);
 }
+
+Mat Map_post_processing(Mat src){
+	Mat frame = RollingGuidanceFilter::filter(src,0.01,0.5,4);
+	return frame;
+}
+
 
 /* generate guide image as per the iteration number 
 Mat getGuideImage(int niter ,int i, Mat img , float sigma){
@@ -299,18 +312,57 @@ Mat getGuideImage(int niter ,int i, Mat img , float sigma){
 	}
 }
 */
+
+void detailEnhancement(Mat img)
+{
+//	Mat img = imread("parrot.jpg");
+	Mat laplacianSharpening, unsharpSharpening;
+
+    // Laplacian sharpening
+	float laplacianBoostFactor = 1.2; // Controls the amount of Laplacian Sharpening
+	Mat kern = (Mat_<double>(3, 3) << 0, -1, 0, -1, 5*laplacianBoostFactor, -1, 0, -1, 0); // The filtering mask for Laplacian sharpening
+	filter2D(img.clone(), laplacianSharpening, img.depth(), kern, Point(-1, -1)); // Applies the masking operator to the image
+
+	// Unsharp mask sharpening
+	Mat blur;
+	GaussianBlur(img.clone(), blur, Size(5, 5), 0.67, 0.67);
+	Mat unsharpMask = img.clone() - blur; // Compute the unsharp mask
+	threshold(unsharpMask.clone(), unsharpMask, 20, 255, THRESH_TOZERO);
+	float unsharpBoostFactor = 9; // Controls the amount of Unsharp Mask Sharpening
+	unsharpSharpening = img.clone() + (unsharpMask * unsharpBoostFactor);
+	/*
+	imshow("Original Image", img);
+	imshow("Laplacian Sharpened Image", laplacianSharpening);
+	imshow("Unsharp Masking Sharpening", unsharpSharpening);
+	*/
+	imwrite("./imgs_b/Laplacian_Sharp_Boost_1_point_2.jpg", laplacianSharpening);
+	imwrite("./imgs_b/Unsharp_Sharp_Boost_9_Threshold_20.jpg", unsharpSharpening);
+}
+
 /* the main function */
+
 int main(){
 	
 	String name = "./imgs_b/cartoon.png";
 
 	Mat img = imread(name,0); // read the input image
+	detailEnhancement(img);
+	imwrite("./imgs_b/temp0.jpg" , img);
+	pencil_sketch(img , "./imgs_b/sketch_inp.jpg");
 	Mat color = imread(name,1);
+
 	if(img.empty()){
 		printf("No such file.\n");
 		getchar();
 		exit(1);
 	}
+	
+	Mat edge_lapl ;
+	Mat edge_canny;
+	Laplacian(img,edge_lapl,1000);
+	Canny( img, edge_canny, 50, 150, 3);
+	imwrite("./imgs_b/edge_lapl.jpg" , edge_lapl);
+	imwrite("./imgs_b/edge_canny.jpg" , edge_canny);
 
 	clock_t startTime = clock();
 	float R[] = {0.5,1,1.5};//,2.5,3,3.5,4};    //spatial tolerance
@@ -354,12 +406,15 @@ int main(){
 					else fi[j].at<uchar>(x,y)= 0;
 				}
 			}
+			if( j==0 ){
+				fi[j] = 255 - fi[j];
+			}
 			imwrite("./imgs_b/fi_"+to_string(i)+"_"+to_string(j)+".jpg",fi[j]);
 			GaussianBlur( fi[j], fi[j],Size(0,0), R[i]);
 			
 			if (j==0){
 				M[i] = fi[j].clone();
-				M[i] = M[i]*0;
+				//M[i] = M[i]*0;
 			}
 			else{
 				for(int x = 0 ; x<fi[j].rows ; x++){
@@ -372,10 +427,11 @@ int main(){
 		
 		if(i == 0){
 			M_final = M[i].clone();
+			//M_final = M_final/16;
 			M_final = M_final*0;
 		}
 		else{
-			M_final += M[i]*(i/3.0);
+			M_final += M[i]*((i+1)/8.0);
 		}
 		imwrite("./imgs_b/m_"+to_string(i)+".jpg",M[i]);
 		
@@ -392,6 +448,45 @@ int main(){
 
 	Mat output = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
 	imwrite("./imgs_b/output.jpg" , output); // M map
+
+
+	Mat frame = Map_post_processing(output);
+	imwrite("./imgs_b/output_ref.jpg" , frame); // M map refined
+
+	Mat temp1 = Mat::zeros(img.rows , img.cols , img.type());
+	/*
+	for( int pro=0 ; pro<10 ; pro++){
+		Mat inp;
+		Mat guide;
+		img.convertTo(inp,CV_MAKETYPE(CV_32F,img.channels()));
+		frame.convertTo(guide,CV_MAKETYPE(CV_32F,img.channels()));
+		img = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
+	}
+	*/
+	
+	Mat inp1;
+	Mat guide1;
+	img.convertTo(inp1,CV_MAKETYPE(CV_32F,img.channels()));
+	frame.convertTo(guide1,CV_MAKETYPE(CV_32F,img.channels()));
+		
+	for( int pro=0 ; pro<10 ; pro++){
+		//img = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
+		inp1 = RollingGuidanceFilter::bilateralPermutohedral(inp1,guide1,1.0,5.0);
+	}
+	
+
+	imwrite("./imgs_b/temp1.jpg" , inp1);
+	
+	//imwrite("./imgs_b/temp1.jpg" , img);
+	//img.convertTo(inp,CV_MAKETYPE(CV_8UC1,1));
+
+
+	/*Mat frame_o;
+	GaussianBlur(frame , frame_o , Size(0,0) , 3);
+	addWeighted(frame , 0.5 , frame_o , -0.5 , 0 , frame);
+
+	imwrite("./imgs_b/output_refo.jpg" , frame_o); // M map
+	*/
 	/*
 	Mat I_basic = RollingGuidanceFilter::filter(img,1,25.5,4);
 	imwrite("./imgs_b/I_basic.jpg" , I_basic);
@@ -492,9 +587,11 @@ int main(){
 	Mat exper = RollingGuidanceFilter::filter(img-M_final,2,25.5,4);
 	//pencil_sketch(exper);
 	*/
-	pencil_sketch(img);
-	
+	pencil_sketch(img , "./imgs_b/sketch_otp.jpg");
+	//detailEnhancement(img);
+
 	//waitKey(0);
 	return 0;
 	//ERROR TO BE REMOVED: WHEN MAX==MIN
 }
+
