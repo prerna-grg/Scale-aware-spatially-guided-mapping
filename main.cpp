@@ -160,7 +160,6 @@
 using namespace std;
 using namespace cv;
 
-
 float* createHist(Mat src){
 	//src.convertTo(src, CV_8UC1);
 	
@@ -228,6 +227,62 @@ int** scale_image(int** src , int min , int max , int rows , int cols){
 	return out;
 }
 
+//((uint8)((B == 255) ? B:min(255, ((A << 8 ) / (255 - B)))))
+void pencil_sketch(Mat src){
+	/*
+	Mat neg = Mat::zeros(src.rows , src.cols , src.type());
+	for(int x = 0 ; x<src.rows ; x++){
+		for(int y = 0 ; y<src.cols ; y++){
+			neg.at<uchar>(x,y) = 255 - src.at<uchar>(x,y);
+		}
+	}
+
+	Mat blur = Mat::zeros(src.rows , src.cols , src.type());
+	GaussianBlur( src, blur,Size(0,0), 5);
+
+	Mat blend = Mat::zeros(src.rows , src.cols , src.type());
+	for(int x = 0 ; x<src.rows ; x++){
+		for(int y = 0 ; y<src.cols ; y++){
+			//blend.at<uchar>(x,y) = min(255,(neg.at<uchar>(x,y)+blur.at<uchar>(x,y)));
+			if(neg.at<uchar>(x,y)==255){
+				blend.at<uchar>(x,y) = 255;
+			}
+			else{
+				blend.at<uchar>(x,y) = min(255,((blur.at<uchar>(x,y) << 8) / (255-neg.at<uchar>(x,y))));
+			}
+		}
+	}
+
+	imwrite("./imgs_b/sketch.jpg",blend);
+	*/
+
+	Mat out = Mat::zeros(src.rows , src.cols , src.type()); 
+	//float ker[6][6] = {{1, 1, 1, 1, 1, 1},{1, 1, 1, 1, 1, 1},{1, 1, -8, -8, 1, 1},{1, 1, -8, -8, 1, 1},{1, 1, 1, 1, 1, 1},{1, 1, 1, 1, 1, 1}};
+	Mat ker = Mat::zeros(6,6,CV_32FC1);
+	for(int x = 0 ; x<6 ; x++){
+		for(int y = 0; y<6 ; y++){
+			ker.at<float>(x,y) = 1;
+		}
+	}
+	for(int x = 2 ; x<4 ; x++){
+		for(int y = 2 ; y<4 ; y++){
+			ker.at<float>(x,y) = -8;
+		}
+	}
+	ker = ker/6;
+
+	filter2D(src, out, -1, ker);
+	
+	Mat neg = Mat::zeros(src.rows , src.cols , src.type());
+	for(int x = 0 ; x<src.rows ; x++){
+		for(int y = 0 ; y<src.cols ; y++){
+			neg.at<uchar>(x,y) = 255 - out.at<uchar>(x,y);
+		}
+	}
+	
+	imwrite("./imgs_b/sketch.jpg",neg);
+}
+
 /* generate guide image as per the iteration number 
 Mat getGuideImage(int niter ,int i, Mat img , float sigma){
 	
@@ -264,14 +319,18 @@ int main(){
 	Mat M_final;
 
 	for(int i = 0 ; i<3 ; i++){
+		int scaleValue = 5;
 		Mat res = RollingGuidanceFilter::filter(img,R[i],25.5,4);
 		imwrite("./imgs_b/roll" + to_string(i) + ".jpg" , res);
-		Mat enis = (img - res)*5 + res;
+
+		//pencil_sketch(res);
+
+		Mat enis = (img - res)*scaleValue + res;
 		imwrite("./imgs_b/enh" + to_string(i) + ".jpg" , enis);
 
 		Mat resc = RollingGuidanceFilter::filter(color,R[i],25.5,4);
 		imwrite("./imgs_b/roll_color" + to_string(i) + ".jpg" , resc);
-		Mat enisc = (color - resc)*5 + 1*resc;
+		Mat enisc = (color - resc)*scaleValue + 1*resc;
 		imwrite("./imgs_b/enh_color" + to_string(i) + ".jpg" , enisc);
 		
 
@@ -325,9 +384,16 @@ int main(){
 	imwrite("./imgs_b/MF.jpg",M_final);
 	//detailEnhance(Mat src, Mat dst, float sigma_s=10, float sigma_r=0.15f)
 
-	Mat output = RollingGuidanceFilter::filter(M_final,1.5,25.5,1);
+	//Mat output = RollingGuidanceFilter::filter(M_final,1.5,25.5,4);
+	Mat inp;
+	Mat guide;
+	M_final.convertTo(inp,CV_MAKETYPE(CV_32F,img.channels()));
+	img.convertTo(guide,CV_MAKETYPE(CV_32F,img.channels()));
+
+	Mat output = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
 	imwrite("./imgs_b/output.jpg" , output); // M map
-	Mat I_basic = RollingGuidanceFilter::filter(img,1,25.5,1);
+	/*
+	Mat I_basic = RollingGuidanceFilter::filter(img,1,25.5,4);
 	imwrite("./imgs_b/I_basic.jpg" , I_basic);
 	int **IoM_arr;
 	IoM_arr = (int**)malloc(img.rows*sizeof(int));
@@ -341,12 +407,12 @@ int main(){
 		}
 	}
 	IoM_arr = scale_image(IoM_arr , min_pixel(IoM_arr,img.rows,img.cols) , max_pixel(IoM_arr,img.rows,img.cols) , img.rows , img.cols);
-	/*for(int d = 0 ; d<img.rows ; d++){
+	for(int d = 0 ; d<img.rows ; d++){
 		for(int e=0 ; e<img.cols ; e++){
 			printf("%d " , IoM[d][e]);
 		}
 	}
-	printf("\n\n\n\n");*/
+	printf("\n\n\n\n");
 	printf("check point 4");
 	Mat IoM_ = Mat::zeros(img.rows, img.cols,img.type() );
 	for(int d = 0 ; d<img.rows ; d++){
@@ -382,17 +448,53 @@ int main(){
 			MoID_.at<uchar>(d,e) = MoID_arr[d][e];
 		}
 	}
-	
+	//------------------------------------------------------
 	float lambda = 1;
-	Mat enI = I_basic + lambda*MoID_;
+	int** enI_arr ;
+
+	enI_arr = (int**)malloc(img.rows*sizeof(int));
+	
+	for(int i = 0 ; i<img.rows ; i++){
+		enI_arr[i] = (int*)malloc(img.cols*sizeof(int));
+	}
+	printf("check point 10");
+	
+	for(int x = 0 ; x<img.rows ; x++){
+		for(int y = 0 ; y<img.cols ; y++){
+			enI_arr[x][y] = I_basic.at<uchar>(x,y) + lambda * MoID_.at<uchar>(x,y) ;//I_det.at<uchar>(x,y) * output.at<uchar>(x,y);
+		}
+	}
+	printf("check point 11");
+	enI_arr = scale_image(enI_arr , min_pixel(enI_arr,img.rows,img.cols) , max_pixel(enI_arr,img.rows,img.cols),img.rows,img.cols);
+	printf("check point 12");
+	Mat enI_ = Mat::zeros(img.rows, img.cols,img.type());
+	for(int d = 0 ; d<img.rows ; d++){
+		for(int e=0 ; e<img.cols ; e++){
+			enI_.at<uchar>(d,e) = enI_arr[d][e];
+		}
+	}
+	//------------------------------------------------------
+	
+	//Mat enI = I_basic + lambda*MoID_;
 	//enI = scale_image(enI , min_pixel(enI) , max_pixel(enI));
-	Canny( output, output, 50, 150, 3);
-	imwrite("./imgs_b/outputt.jpg" , output);
+	//Canny( output, output, 50, 150, 3);
+	//for(int x = 0 ; x< output.rows; x++){
+	//	for(int y = 0; y<output.cols; y++){
+	//		output.at<uchar>(x,y) = 255 - output.at<uchar>(x,y);
+	//	}
+	//}
+	//imwrite("./imgs_b/outputt.jpg" , output);
 	
 	imwrite("./imgs_b/MoID.jpg" , MoID_);
 	
-	imwrite("./imgs_b/enI.jpg" , enI);
+	imwrite("./imgs_b/enI.jpg" , enI_);
+
+	Mat exper = RollingGuidanceFilter::filter(img-M_final,2,25.5,4);
+	//pencil_sketch(exper);
+	*/
+	pencil_sketch(img);
 	
 	//waitKey(0);
 	return 0;
+	//ERROR TO BE REMOVED: WHEN MAX==MIN
 }
