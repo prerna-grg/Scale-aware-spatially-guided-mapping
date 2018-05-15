@@ -234,61 +234,6 @@ int** scale_image(int** src , int min , int max , int rows , int cols){
 	return out;
 }
 
-//((uint8)((B == 255) ? B:min(255, ((A << 8 ) / (255 - B)))))
-void pencil_sketch(Mat src , String name){
-	/*
-	Mat neg = Mat::zeros(src.rows , src.cols , src.type());
-	for(int x = 0 ; x<src.rows ; x++){
-		for(int y = 0 ; y<src.cols ; y++){
-			neg.at<uchar>(x,y) = 255 - src.at<uchar>(x,y);
-		}
-	}
-
-	Mat blur = Mat::zeros(src.rows , src.cols , src.type());
-	GaussianBlur( src, blur,Size(0,0), 5);
-
-	Mat blend = Mat::zeros(src.rows , src.cols , src.type());
-	for(int x = 0 ; x<src.rows ; x++){
-		for(int y = 0 ; y<src.cols ; y++){
-			//blend.at<uchar>(x,y) = min(255,(neg.at<uchar>(x,y)+blur.at<uchar>(x,y)));
-			if(neg.at<uchar>(x,y)==255){
-				blend.at<uchar>(x,y) = 255;
-			}
-			else{
-				blend.at<uchar>(x,y) = min(255,((blur.at<uchar>(x,y) << 8) / (255-neg.at<uchar>(x,y))));
-			}
-		}
-	}
-
-	imwrite("./imgs_b/sketch.jpg",blend);
-	*/
-
-	Mat out = Mat::zeros(src.rows , src.cols , src.type()); 
-	//float ker[6][6] = {{1, 1, 1, 1, 1, 1},{1, 1, 1, 1, 1, 1},{1, 1, -8, -8, 1, 1},{1, 1, -8, -8, 1, 1},{1, 1, 1, 1, 1, 1},{1, 1, 1, 1, 1, 1}};
-	Mat ker = Mat::zeros(6,6,CV_32FC1);
-	for(int x = 0 ; x<6 ; x++){
-		for(int y = 0; y<6 ; y++){
-			ker.at<float>(x,y) = 1;
-		}
-	}
-	for(int x = 2 ; x<4 ; x++){
-		for(int y = 2 ; y<4 ; y++){
-			ker.at<float>(x,y) = -8;
-		}
-	}
-	ker = ker/6;
-
-	filter2D(src, out, -1, ker);
-	
-	Mat neg = Mat::zeros(src.rows , src.cols , src.type());
-	for(int x = 0 ; x<src.rows ; x++){
-		for(int y = 0 ; y<src.cols ; y++){
-			neg.at<uchar>(x,y) = 255 - out.at<uchar>(x,y);
-		}
-	}
-	
-	imwrite(name,neg);
-}
 
 Mat Map_post_processing(Mat src){
 	Mat frame = RollingGuidanceFilter::filter(src,0.01,0.5,4);
@@ -409,64 +354,60 @@ void Cartoonize(){
 }
 */
 
-void Cartoonize(int ch){
-	/*
-	String name = "./imgs_b/cartoon.png";
-	Mat color = imread(name,1);
+Mat Cartoonize(String name){
 
-	if(color.empty()){
+	Mat clr = imread(name,1);
+	if(clr.empty()){
 		printf("No such file.\n");
 		getchar();
 		exit(1);
 	}
 	
 	Mat bgr[3];
-	split(color,bgr);
-	Mat img[3];
-	Mat res[3];
-	float R[] = {0.5,1,1.5};//,2.5,3,3.5,4};    //spatial tolerance
-	Mat M_final[3],M_final_f;
-	Mat output[3],output_f;
-	Mat frame[3];
-	Mat temp_f;
-	Mat* inp1 = new Mat[3];
+	split(clr,bgr);
+	imwrite("./imgs_b/imgs_c/channel0.jpg",bgr[0]);
+	imwrite("./imgs_b/imgs_c/channel1.jpg",bgr[1]);
+	imwrite("./imgs_b/imgs_c/channel2.jpg",bgr[2]);
 
-	for(int channels = 0 ; channels<3 ; channels++){
-		img[channels] = bgr[channels].clone();
+	for(int ch = 0 ; ch < 3 ; ch++){
+		String name = "./imgs_b/imgs_c/channel"+to_string(ch)+".jpg";
+		Mat img = imread(name,0);
+
+		if(img.empty()){
+			printf("No such file.\n");
+			getchar();
+			exit(1);
+		}
+
 		clock_t startTime = clock();
-		
+		float R[] = {0.5,1,1.5};//,2.5,3,3.5,4};    //spatial tolerance
 		float J[8];
 		Mat M[8];
-		
-		printf("Parul1\n");
+		Mat M_final;
 
 		for(int i = 0 ; i<3 ; i++){
-			res[channels] = RollingGuidanceFilter::filter(img[channels],R[i],25.5,4);
-			imwrite("./imgs_b/roll_color" +to_string(channels) +"_"+to_string(i) + ".jpg" , res[channels]);
-			Laplacian(res[channels],res[channels],3);
-			//res.convertTo(res, CV_8UC1);
-		
+			Mat res = RollingGuidanceFilter::filter(img,R[i],25.5,4);
+			Laplacian(res,res,3);
+			res.convertTo(res, CV_8UC1);
+			
 			printf("Elapsed Time: %d ms\n",clock()-startTime);
 
-			imwrite("./imgs_b/laplace" +to_string(channels) +"_"+to_string(i+1) +".jpg",res[channels]);
-			
-			float* r8 = createHist(res[channels]);
+			imwrite("./imgs_b/imgs_c/laplace"+to_string(ch)+"_"+to_string(i+1) +".jpg",res);
+			float* r8 = createHist(res);
 
 			Mat fi[16];
-			
 			for(int j = 0; j<16 ; j++){
-				fi[j] = Mat::zeros(img[channels].rows , img[channels].cols , img[channels].type());//res.clone();
-			
+				fi[j] = Mat::zeros(img.rows , img.cols , img.type());
+
 				for(int x = 0 ; x<fi[j].rows ; x++){
 					for(int y = 0 ; y<fi[j].cols ; y++){
-						if(res[channels].at<uchar>(x,y)/16 == j)fi[j].at<uchar>(x,y)= 255;
+						if(res.at<uchar>(x,y)/16 == j)fi[j].at<uchar>(x,y)= 255;
 						else fi[j].at<uchar>(x,y)= 0;
 					}
 				}
 				if( j==0 ){
 					fi[j] = 255 - fi[j];
 				}
-				imwrite("./imgs_b/fi_"+ to_string(channels)+"_"+to_string(i)+"_"+to_string(j)+".jpg",fi[j]);
 				GaussianBlur( fi[j], fi[j],Size(0,0), R[i]);
 			
 				if (j==0){
@@ -481,68 +422,112 @@ void Cartoonize(int ch){
 					}
 				}
 			}
-			printf("Parul2\n");
+
 			if(i == 0){
-				M_final[channels] = M[i].clone();
-				M_final[channels] = M_final[channels]/16;
+				M_final = M[i].clone();
+				M_final = M_final/16;
 				//M_final = M_final*0;
 			}
 			else{
-				M_final[channels] += M[i]*((i+1)/8.0);
+				M_final += M[i]*((i+1)/8.0);
 			}
-			imwrite("./imgs_b/m_"+to_string(channels)+"_"+to_string(i)+".jpg",M[i]);
-		
+			imwrite("./imgs_b/imgs_c/m"+to_string(ch)+"_"+to_string(i)+".jpg",M[i]);
+
 		}
 
-		imwrite("./imgs_b/MF"+ to_string(channels)+".jpg",M_final[channels]);
+		imwrite("./imgs_b/imgs_c/MF"+to_string(ch)+".jpg",M_final);
+
 		Mat inp;
 		Mat guide;
-		M_final[channels].convertTo(inp,CV_MAKETYPE(CV_32F,img[channels].channels()));
-		img[channels].convertTo(guide,CV_MAKETYPE(CV_32F,img[channels].channels()));
-		printf("Parul3\n");
-		output[channels] = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
-		imwrite("./imgs_b/output.jpg" , output[channels]); // M map
+		M_final.convertTo(inp,CV_MAKETYPE(CV_32F,img.channels()));
+		img.convertTo(guide,CV_MAKETYPE(CV_32F,img.channels()));
 
-		frame[channels] = Map_post_processing(output[channels]);
-		frame[channels].convertTo(frame[channels],CV_MAKETYPE(img[channels].depth(),img[channels].channels()));
-		imwrite("./imgs_b/output_ref"+to_string(channels)+".jpg" , 255-frame[channels]); // M map refined
-		Mat temp1 = Mat::zeros(img[channels].rows , img[channels].cols , img[channels].type());
-	
-		for( int pro=0 ; pro<10 ; pro++){
-			Mat inp;
-			Mat guide;
-			img[channels].convertTo(inp,CV_MAKETYPE(CV_32F,img[channels].channels()));
-			frame[channels].convertTo(guide,CV_MAKETYPE(CV_32F,img[channels].channels()));
-			img[channels] = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
-		}
-	
-		printf("Parul4\n");
+		Mat output = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
+		imwrite("./imgs_b/imgs_c/output"+to_string(ch)+".jpg" , output); // M map
+
+		Mat frame = Map_post_processing(output);
+		frame.convertTo(frame,CV_MAKETYPE(img.depth(),img.channels()));
+		imwrite("./imgs_b/imgs_c/output_ref"+to_string(ch)+".jpg" , 255-frame);
+
+		Mat temp1 = Mat::zeros(img.rows , img.cols , img.type());
+		Mat inp1;
 		Mat guide1;
-		img[channels].convertTo(inp1[channels],CV_MAKETYPE(CV_32F,img[channels].channels()));
-		frame[channels].convertTo(guide1,CV_MAKETYPE(CV_32F,img[channels].channels()));
-		printf("Parul5\n");
+		img.convertTo(inp1,CV_MAKETYPE(CV_32F,img.channels()));
+		frame.convertTo(guide1,CV_MAKETYPE(CV_32F,img.channels()));
+		
 		for( int pro=0 ; pro<5 ; pro++){
-			inp1[channels] = RollingGuidanceFilter::bilateralPermutohedral(inp1[channels],guide1,1.0,5.0);
+			//img = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
+			inp1 = RollingGuidanceFilter::bilateralPermutohedral(inp1,guide1,1.0,5.0);
 		}
-		imwrite("./imgs_b/temp1"+to_string(channels)+".jpg" , inp1[channels]);
-		printf("Parul6\n");
-		inp1[channels].convertTo(inp1[channels],CV_MAKETYPE(img[channels].depth(),img[channels].channels()));
-		//merge(inp1,3,temp_f);
-		printf("Parul7\n");
-		//imwrite("./imgs_b/final.jpg",temp_f);
-		printf("**********!!!!!!!!!!!!!!!!!!**********-------11111*******************!!!!!!!!!!*");
-	}
-	*/
-	//-------------------------------------------------------------------------------------------------------------------
-	/*
-	String name = "./imgs_b/cartoon.png";
-	Mat color = imread(name,0);
+	
 
-	if(color.empty()){
+		imwrite("./imgs_b/imgs_c/temp1_"+to_string(ch)+".jpg" , inp1);
+
+	}
+
+	Mat* temp = new Mat[3];
+	for(int ch  = 0 ; ch<3 ; ch++){
+		temp[ch]= imread("./imgs_b/imgs_c/temp1_"+to_string(ch)+".jpg",0);
+	}
+
+	Mat final_img ; 
+	merge(temp,3,final_img); 
+
+	//final_img = RollingGuidanceFilter::filter(final_img,2,25.5,4);
+	imwrite("./imgs_b/imgs_c/final.jpg",final_img);
+
+	return final_img;
+}
+
+void pencil_sketch(Mat src , String name){
+
+	Mat out = Mat::zeros(src.rows , src.cols , src.type()); 
+
+	Mat ker = Mat::zeros(6,6,CV_32FC1);
+	for(int x = 0 ; x<6 ; x++){
+		for(int y = 0; y<6 ; y++){
+			ker.at<float>(x,y) = 1;
+		}
+	}
+	for(int x = 2 ; x<4 ; x++){
+		for(int y = 2 ; y<4 ; y++){
+			ker.at<float>(x,y) = -8;
+		}
+	}
+	ker = ker/6;
+
+	filter2D(src, out, -1, ker);
+	
+	Mat neg = Mat::zeros(src.rows , src.cols , src.type());
+	for(int x = 0 ; x<src.rows ; x++){
+		for(int y = 0 ; y<src.cols ; y++){
+			neg.at<uchar>(x,y) = 255 - out.at<uchar>(x,y);
+		}
+	}
+	
+	imwrite(name,neg);
+}
+
+
+void sketch(String name){
+
+	Mat img = imread(name,0); // read the input image
+	
+	if(img.empty()){
 		printf("No such file.\n");
 		getchar();
 		exit(1);
 	}
+
+	pencil_sketch(img , "./imgs_b/sketch_inp.jpg");
+
+	Mat edge_lapl ;
+	Mat edge_canny;
+	Laplacian(img,edge_lapl,1000);
+	Canny( img, edge_canny, 50, 150, 3);
+	imwrite("./imgs_b/edge_lapl.jpg" , 255-edge_lapl);
+	imwrite("./imgs_b/edge_canny.jpg" , 255-edge_canny);
+
 	clock_t startTime = clock();
 	float R[] = {0.5,1,1.5};//,2.5,3,3.5,4};    //spatial tolerance
 	float J[8];
@@ -550,14 +535,12 @@ void Cartoonize(int ch){
 	Mat M_final;
 
 	for(int i = 0 ; i<3 ; i++){
-		Mat res = RollingGuidanceFilter::filter(color,R[i],25.5,4);
-		imwrite("./imgs_b/roll_color" + to_string(i) + ".jpg" , res);
-		Laplacian(res,res,3);
-		//res.convertTo(res, CV_8UC1);
-		
-		printf("Elapsed Time: %d ms\n",clock()-startTime);
+		Mat res = RollingGuidanceFilter::filter(img,R[i],25.5,4);
 
-		imwrite("./imgs_b/laplace"+to_string(i+1) +".jpg",res);
+		Laplacian(res,res,3);
+		res.convertTo(res, CV_8UC1);
+
+		printf("Elapsed Time: %d ms\n",clock()-startTime);
 		float* r8 = createHist(res);
 
 		Mat fi[16];
@@ -574,7 +557,7 @@ void Cartoonize(int ch){
 			if( j==0 ){
 				fi[j] = 255 - fi[j];
 			}
-			imwrite("./imgs_b/fi_"+to_string(i)+"_"+to_string(j)+".jpg",fi[j]);
+			
 			GaussianBlur( fi[j], fi[j],Size(0,0), R[i]);
 			
 			if (j==0){
@@ -599,10 +582,10 @@ void Cartoonize(int ch){
 			M_final += M[i]*((i+1)/8.0);
 		}
 		imwrite("./imgs_b/m_"+to_string(i)+".jpg",M[i]);
-		
 	}
 
 	imwrite("./imgs_b/MF.jpg",M_final);
+
 	Mat inp;
 	Mat guide;
 	M_final.convertTo(inp,CV_MAKETYPE(CV_32F,img.channels()));
@@ -614,67 +597,39 @@ void Cartoonize(int ch){
 	Mat frame = Map_post_processing(output);
 	frame.convertTo(frame,CV_MAKETYPE(img.depth(),img.channels()));
 	imwrite("./imgs_b/output_ref.jpg" , 255-frame); // M map refined
+
 	Mat temp1 = Mat::zeros(img.rows , img.cols , img.type());
-	
-	for( int pro=0 ; pro<10 ; pro++){
-		Mat inp;
-		Mat guide;
-		img.convertTo(inp,CV_MAKETYPE(CV_32F,img.channels()));
-		frame.convertTo(guide,CV_MAKETYPE(CV_32F,img.channels()));
-		img = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
-	}
-	
+
 	Mat inp1;
 	Mat guide1;
 	img.convertTo(inp1,CV_MAKETYPE(CV_32F,img.channels()));
 	frame.convertTo(guide1,CV_MAKETYPE(CV_32F,img.channels()));
 		
 	for( int pro=0 ; pro<5 ; pro++){
+		//img = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
 		inp1 = RollingGuidanceFilter::bilateralPermutohedral(inp1,guide1,1.0,5.0);
 	}
-	imwrite("./imgs_b/temp1.jpg" , inp1);
 	
+
+	imwrite("./imgs_b/temp1_.jpg" , inp1);
+
+
 	inp1.convertTo(inp1,CV_MAKETYPE(img.depth(),img.channels()));
-*/
+	pencil_sketch(inp1 , "./imgs_b/sketch_otp.jpg");
+
+	return;
 }
 
 /* the main function */
 
 int main(){
-	
-
-	Mat* temp = new Mat[3];
-	for(int ch  = 0 ; ch<3 ; ch++){
-		temp[ch]= imread("./imgs_b/imgs_c/temp1_"+to_string(ch)+".jpg",0);
-	}
-
-	Mat final_img ; 
-	merge(temp,3,final_img); 
-	imwrite("./imgs_b/imgs_c/final.jpg",final_img);
-	//Cartoonize();
-
 	/*
-	int ch = 2;
-	String name = "./imgs_b/imgs_c/cartoon"+to_string(ch)+".jpg";
+	String name = "./imgs_b/cartoon.jpg";
 	
-	Mat clr = imread(name,1);
-	if(clr.empty()){
-		printf("No such file.\n");
-		getchar();
-		exit(1);
-	}
-	
-	Mat bgr[3];
-	split(clr,bgr);
-	imwrite("./imgs_b/imgs_c/cartoon0.jpg",bgr[0]);
-	imwrite("./imgs_b/imgs_c/cartoon1.jpg",bgr[1]);
-	imwrite("./imgs_b/imgs_c/cartoon2.jpg",bgr[2]);
-	*/
-	/*
 	Mat img = imread(name,0); // read the input image
 	detailEnhancement(img);
 	//imwrite("./imgs_b/temp0.jpg" , img);
-	pencil_sketch(img , "./imgs_b/imgs_c/sketch_inp"+to_string(ch)+".jpg");
+	pencil_sketch(img , "./imgs_b/sketch_inp.jpg");
 	Mat color = imread(name,1);
 
 	if(img.empty()){
@@ -687,8 +642,8 @@ int main(){
 	Mat edge_canny;
 	Laplacian(img,edge_lapl,1000);
 	Canny( img, edge_canny, 50, 150, 3);
-	imwrite("./imgs_b/imgs_c/edge_lapl"+to_string(ch)+".jpg" , 255-edge_lapl);
-	imwrite("./imgs_b/imgs_c/edge_canny"+to_string(ch)+".jpg" , 255-edge_canny);
+	imwrite("./imgs_b/edge_lapl.jpg" , 255-edge_lapl);
+	imwrite("./imgs_b/edge_canny.jpg" , 255-edge_canny);
 
 	clock_t startTime = clock();
 	float R[] = {0.5,1,1.5};//,2.5,3,3.5,4};    //spatial tolerance
@@ -718,7 +673,7 @@ int main(){
 		
 		printf("Elapsed Time: %d ms\n",clock()-startTime);
 
-		imwrite("./imgs_b/imgs_c/laplace"+to_string(ch)+"_"+to_string(i+1) +".jpg",res);
+		imwrite("./imgs_b/imgs_c/laplace_"+to_string(i+1) +".jpg",res);
 		float* r8 = createHist(res);
 
 		Mat fi[16];
@@ -759,11 +714,11 @@ int main(){
 		else{
 			M_final += M[i]*((i+1)/8.0);
 		}
-		imwrite("./imgs_b/imgs_c/m"+to_string(ch)+"_"+to_string(i)+".jpg",M[i]);
+		imwrite("./imgs_b/imgs_c/m_"+to_string(i)+".jpg",M[i]);
 		
 	}
 
-	imwrite("./imgs_b/imgs_c/MF"+to_string(ch)+".jpg",M_final);
+	imwrite("./imgs_b/imgs_c/MF.jpg",M_final);
 	//detailEnhance(Mat src, Mat dst, float sigma_s=10, float sigma_r=0.15f)
 
 	//Mat output = RollingGuidanceFilter::filter(M_final,1.5,25.5,4);
@@ -773,14 +728,14 @@ int main(){
 	img.convertTo(guide,CV_MAKETYPE(CV_32F,img.channels()));
 
 	Mat output = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
-	imwrite("./imgs_b/imgs_c/output"+to_string(ch)+".jpg" , output); // M map
+	imwrite("./imgs_b/output.jpg" , output); // M map
 
 	Mat frame = Map_post_processing(output);
 	frame.convertTo(frame,CV_MAKETYPE(img.depth(),img.channels()));
 	//Mat eq_hist;
 	//equalizeHist(255-frame,eq_hist);
-	imwrite("./imgs_b/imgs_c/output_ref"+to_string(ch)+".jpg" , 255-frame); // M map refined
-	ContrastStretch(255-frame);
+	imwrite("./imgs_b/output_ref.jpg" , 255-frame); // M map refined
+	//ContrastStretch(255-frame);
 	Mat temp1 = Mat::zeros(img.rows , img.cols , img.type());
 	
 	//for( int pro=0 ; pro<10 ; pro++){
@@ -802,17 +757,17 @@ int main(){
 	}
 	
 
-	imwrite("./imgs_b/imgs_c/temp1_"+to_string(ch)+".jpg" , inp1);
+	imwrite("./imgs_b/temp1_.jpg" , inp1);
 
 
 	inp1.convertTo(inp1,CV_MAKETYPE(img.depth(),img.channels()));
-	pencil_sketch(inp1 , "./imgs_b/imgs_c/sketch_otp_"+to_string(ch)+".jpg");
-	*/
+	pencil_sketch(inp1 , "./imgs_b/sketch_otp.jpg");
+	
 
 	//imwrite("./imgs_b/temp1.jpg" , img);
 	//img.convertTo(inp,CV_MAKETYPE(CV_8UC1,1));
 
-	/*Mat frame_o;
+	Mat frame_o;
 	GaussianBlur(frame , frame_o , Size(0,0) , 3);
 	addWeighted(frame , 0.5 , frame_o , -0.5 , 0 , frame);
 
@@ -913,13 +868,17 @@ int main(){
 	
 	Mat exper = RollingGuidanceFilter::filter(img-M_final,2,25.5,4);*/
 	//pencil_sketch(exper);
-	
-	
+	//ERROR TO BE REMOVED: WHEN MAX==MIN
 	
 	//detailEnhancement(img);
 
 	//waitKey(0);
+
+	Mat out = Cartoonize("./imgs_b/pics/Boat.jpeg");
+	printf("Parul %d\n",out.type());
+	Mat final_img = RollingGuidanceFilter::filter(out,2,25.5,4);
+	imwrite("./imgs_b/imgs_c/final2.jpg",final_img);
 	return 0;
-	//ERROR TO BE REMOVED: WHEN MAX==MIN
+	
 }
 
