@@ -181,6 +181,9 @@ float* createHist(Mat src){
 		}
 	}
 	for(int i=0 ; i<16 ; i++){
+		printf("R%d = %f\n",i,R[i]);
+	}
+	for(int i=0 ; i<16 ; i++){
 		R[i] /= (src.rows*src.cols);
 		R[i] = 1- R[i];
 		printf("%f " ,  R[i]);
@@ -471,10 +474,25 @@ Mat Cartoonize(String name){
 	}
 
 	Mat final_img ; 
-	merge(temp,3,final_img); 
+	merge(temp,3,final_img);
 
+	Mat MFfinal;
+	for(int ch  = 0 ; ch<3 ; ch++){
+		temp[ch]= imread("./imgs_b/imgs_c/MF"+to_string(ch)+".jpg",0);
+	}
+
+	merge(temp,3,MFfinal);
+
+	Mat outfinal;
+	for(int ch  = 0 ; ch<3 ; ch++){
+		temp[ch]= imread("./imgs_b/imgs_c/output_ref"+to_string(ch)+".jpg",0);
+	}
+
+	merge(temp,3,outfinal);
 	//final_img = RollingGuidanceFilter::filter(final_img,2,25.5,4);
 	imwrite("./imgs_b/imgs_c/final.jpg",final_img);
+	imwrite("./imgs_b/imgs_c/MFfinal.jpg",MFfinal);
+	imwrite("./imgs_b/imgs_c/outreffinal.jpg",outfinal);
 
 	return final_img;
 }
@@ -518,15 +536,15 @@ void sketch(String name){
 		getchar();
 		exit(1);
 	}
-
+	imwrite("./imgs_b/womangrey.jpg",img);
 	pencil_sketch(img , "./imgs_b/sketch_inp.jpg");
 
 	Mat edge_lapl ;
 	Mat edge_canny;
 	Laplacian(img,edge_lapl,1000);
 	Canny( img, edge_canny, 50, 150, 3);
-	imwrite("./imgs_b/edge_lapl.jpg" , 255-edge_lapl);
-	imwrite("./imgs_b/edge_canny.jpg" , 255-edge_canny);
+	imwrite("./imgs_b/edge_lapl.jpg" , edge_lapl);
+	imwrite("./imgs_b/edge_canny.jpg" , edge_canny);
 
 	clock_t startTime = clock();
 	float R[] = {0.5,1,1.5};//,2.5,3,3.5,4};    //spatial tolerance
@@ -557,7 +575,7 @@ void sketch(String name){
 			if( j==0 ){
 				fi[j] = 255 - fi[j];
 			}
-			
+			imwrite("./imgs_b/zi_"+to_string(i)+to_string(j)+".jpg",fi[j]);
 			GaussianBlur( fi[j], fi[j],Size(0,0), R[i]);
 			
 			if (j==0){
@@ -584,7 +602,7 @@ void sketch(String name){
 		imwrite("./imgs_b/m_"+to_string(i)+".jpg",M[i]);
 	}
 
-	imwrite("./imgs_b/MF.jpg",M_final);
+	imwrite("./imgs_b/MF.jpg",255-M_final);
 
 	Mat inp;
 	Mat guide;
@@ -607,7 +625,7 @@ void sketch(String name){
 		
 	for( int pro=0 ; pro<5 ; pro++){
 		//img = RollingGuidanceFilter::bilateralPermutohedral(inp,guide,1.0,5.0);
-		inp1 = RollingGuidanceFilter::bilateralPermutohedral(inp1,guide1,1.0,5.0);
+		inp1 = RollingGuidanceFilter::bilateralPermutohedral(inp1,guide1,1,10.0);
 	}
 	
 
@@ -873,11 +891,16 @@ int main(){
 	//detailEnhancement(img);
 
 	//waitKey(0);
+	int cas=0;
+	printf("Enter 1 to generate pencil sketch\nEnter 2 to generate cartoonized effect\n");
+	scanf("%d" , &cas);
+	if( cas == 1 ){
+		sketch("./imgs_b/woman.jpg");
+	}
+	else if(cas == 2 ){
+		Mat out = Cartoonize("./imgs_b/c2.jpeg");
+	}
 
-	Mat out = Cartoonize("./imgs_b/pics/Boat.jpeg");
-	printf("Parul %d\n",out.type());
-	Mat final_img = RollingGuidanceFilter::filter(out,2,25.5,4);
-	imwrite("./imgs_b/imgs_c/final2.jpg",final_img);
 	return 0;
 	
 }
